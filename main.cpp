@@ -1,11 +1,20 @@
 #include <QCoreApplication>
 #include <QCommandLineParser>
+#include <QNetworkProxy>
 
 #include "weekly.h"
 
 int main(int argc, char *argv[])
 {
     QCoreApplication a(argc, argv);
+
+    QNetworkProxy proxy;
+
+    proxy.setHostName("localhost");
+    proxy.setPort(8888);
+    proxy.setType(QNetworkProxy::HttpProxy);
+
+    QNetworkProxy::setApplicationProxy(proxy);
 
     QCommandLineOption option_email("-e", "指定邮箱地址");
     QCommandLineOption option_pass("-p", "设置登录密码");
