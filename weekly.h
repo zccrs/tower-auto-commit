@@ -36,6 +36,7 @@ private:
 
     QNetworkAccessManager *m_networkManager;
     QByteArray m_members_id;
+    QByteArray m_csrf_token;
 
     QByteArray m_email;
     QByteArray m_password;

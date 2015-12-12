@@ -65,7 +65,7 @@ void Weekly::onGetLoginPageFinished()
             const QList<QByteArray> &tmp_list = data.mid(csrf_content_index, csrf_index - csrf_content_index).split('"');
 
             if(tmp_list.count() > 1) {
-                const QByteArray &csrf = tmp_list[1];
+                m_csrf_token = tmp_list[1];
 
                 reply->deleteLater();
 
@@ -73,7 +73,7 @@ void Weekly::onGetLoginPageFinished()
 
                 QByteArrayMap rawHeader;
 
-                rawHeader["X-CSRF-Token"] = csrf;
+                rawHeader["X-CSRF-Token"] = m_csrf_token;
 
                 httpRequest(&Weekly::onLoginFinished, url_login_page, data, rawHeader);
             }
@@ -181,17 +181,18 @@ void Weekly::onGetEditWeeklyPageFinished()
                 pError() << "get weekly_item_guid failed.";
             }
 
-            const QByteArray request_data = "conn_guid=5c5abbcda47cad503add9cfe6e3378cd"
-                                            "&report_guid=7923fb667a11480389ea97948ac40c4d"
-                                            "&content=&template_guid=aefd3ef66d804c51be032d0de6018ca3"
-                                            "&data=" + QJsonDocument(json_data).toJson().toPercentEncoding()
+            const QByteArray request_data = "data=" + QJsonDocument(json_data).toJson(QJsonDocument::Compact).toPercentEncoding()
                                             + "&start_at=" + QByteArray("2014-12-29");
+
+            QByteArrayMap rawHeader;
+
+            rawHeader["X-CSRF-Token"] = m_csrf_token;
 
             httpRequest([this] {
                 GET_REPLY
 
                 qDebug() << reply->readAll();
-            }, getPostWeeklyUrl(), request_data);
+            }, getPostWeeklyUrl(), request_data, rawHeader);
         } else {
             pError() << rx.errorString();
         }
@@ -224,7 +225,7 @@ QByteArray Weekly::getPostWeeklyUrl() const
 
 QByteArray Weekly::getEditWeeklyUrl() const
 {
-    return url_tower + m_members_id + "/weekly_reports/" + getTargetWeek() + "/edit?""conn_guid=5c5abbcda47cad503add9cfe6e3378cd";
+    return url_tower + m_members_id + "/weekly_reports/" + getTargetWeek() + "/edit";
 }
 
 template<typename Function>
