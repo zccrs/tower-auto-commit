@@ -28,17 +28,29 @@ const QByteArray url_login_page = url_tower + "/users/sign_in";
 Weekly::Weekly(QObject *parent) : QObject(parent)
 {
     m_networkManager = new QNetworkAccessManager(this);
-
-    m_weeklyList << "1" << "2" << "3" << "4" << "5" << "6" << "7";
 }
 
-void Weekly::commitWeekly(const QByteArray &email, const QByteArray &pass, const QByteArray &content)
+bool Weekly::commitWeekly(const QString &email, const QString &pass, const QString &content_json, const QString &date)
 {
-    m_email = email;
-    m_password = pass;
-    m_weekly = content;
+    const QJsonDocument json_doc = QJsonDocument::fromJson(content_json.toUtf8());
+
+    if(!json_doc.isArray()) {
+        pError() << "Data is not json array.";
+
+        return false;
+    }
+
+    m_email = email.toLatin1();
+    m_password = pass.toLatin1();
+    m_targetDate = QDate::fromString(date, "yyyy-M-d");
+
+    for(const QJsonValue &value: json_doc.array()) {
+        m_weeklyDataList << value.toString();
+    }
 
     httpRequest(&Weekly::onInitCookieFinished, url_tower);
+
+    return true;
 }
 
 void Weekly::onInitCookieFinished()
@@ -166,13 +178,13 @@ void Weekly::onGetEditWeeklyPageFinished()
             QJsonArray json_data;
             int i = 0;
 
-            while(match.hasNext() && i < m_weeklyList.count()) {
+            while(match.hasNext() && i < m_weeklyDataList.count()) {
                 QJsonObject json_obj;
 
                 QRegularExpressionMatch tmp = match.next();
 
                 json_obj[tmp.captured(1)] = tmp.captured(2);
-                json_obj["content"] = m_weeklyList[i++];
+                json_obj["content"] = m_weeklyDataList[i++];
 
                 json_data << json_obj;
             }
@@ -182,7 +194,7 @@ void Weekly::onGetEditWeeklyPageFinished()
             }
 
             const QByteArray request_data = "data=" + QJsonDocument(json_data).toJson(QJsonDocument::Compact).toPercentEncoding()
-                                            + "&start_at=" + QByteArray("2014-12-29");
+                                            + "&start_at=" + getWeekStartDate(m_targetDate).toString(Qt::ISODate).toLatin1();
 
             QByteArrayMap rawHeader;
 
@@ -191,7 +203,18 @@ void Weekly::onGetEditWeeklyPageFinished()
             httpRequest([this] {
                 GET_REPLY
 
-                qDebug() << reply->readAll();
+                const QJsonObject &json_obj = QJsonDocument::fromJson(reply->readAll()).object();
+                const QJsonArray &errors = json_obj["errors"].toArray();
+
+                for(const QJsonValue &value : errors) {
+                    pError() << value.toObject()["msg"].toString();
+                }
+
+                if(json_obj["success"].toBool()) {
+                    PrintError.print("Success");
+
+                    qApp->quit();
+                }
             }, getPostWeeklyUrl(), request_data, rawHeader);
         } else {
             pError() << rx.errorString();
@@ -199,20 +222,40 @@ void Weekly::onGetEditWeeklyPageFinished()
     }
 }
 
+QDate Weekly::getWeekStartDate(const QDate &date)
+{
+    return date.addDays(- date.dayOfWeek() + 1);
+}
+
+int Weekly::getWeekNumber(const QDate &date, int *year)
+{
+    if(date.isValid()) {
+        int week = date.dayOfWeek();
+
+        if(week > date.dayOfYear()) {
+            return getWeekNumber(getWeekStartDate(date), year);
+        } else {
+            if(year)
+                *year = date.year();
+
+            QDate tmp_date(date.year(), 1, 1);
+
+            return (date.dayOfYear() - tmp_date.dayOfWeek() - 1) / 7 + 1;
+        }
+    }
+
+    return 0;
+}
+
 QByteArray Weekly::getTargetWeek() const
 {
     int year;
     int week_index;
 
-    if(m_targetDate.isValid()) {
-        week_index = m_targetDate.weekNumber(&year);
-    } else {
-        week_index = QDate::currentDate().weekNumber(&year);
-    }
+    week_index = getWeekNumber(m_targetDate, &year);
 
     if(week_index > 0) {
-        //return QByteArray::number(year) + "-" + QByteArray::number(week_index - 1);
-        return "2014-52";
+        return QByteArray::number(year) + "-" + QByteArray::number(week_index);
     }
 
     return "";
@@ -254,7 +297,7 @@ void Weekly::httpRequest(Function slot, const QByteArray &url,
 
     connect(reply, &QNetworkReply::finished, this, slot);
 
-    qDebug() << "request url:" << url << " data:" << data;
+    qDebug() << "request url:" << url << " data:" << QByteArray::fromPercentEncoding(data);
 }
 
 
