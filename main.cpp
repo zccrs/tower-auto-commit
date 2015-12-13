@@ -4,6 +4,7 @@
 #include <QDate>
 #include <QRegularExpression>
 #include <QFile>
+#include <QProcess>
 
 #include "weekly.h"
 
@@ -23,9 +24,11 @@ int main(int argc, char *argv[])
 
     QCommandLineOption option_email(QStringList() << "e" << "email", "email address.", "email");
     QCommandLineOption option_pass(QStringList() << "p" << "password", "password.", "password");
-    QCommandLineOption option_data(QStringList() << "d" << "data", "weekly data.(format=JSON)", "data");
+    QCommandLineOption option_data(QStringList() << "d" << "data", "weekly data (format=JSON).", "data");
+    QCommandLineOption option_file(QStringList() << "f" << "file-path", "the contents of the file as weekly data (text-encoding=UTF-8, format=JSON).", "file-path");
+    QCommandLineOption option_command(QStringList() << "c" << "command", "exec command, it returns the contents as weekly data (text-encoding=UTF-8, format=JSON).", "command");
     QCommandLineOption option_date(QStringList() << "D" << "date", "date, format=yyyy-M-d, default is system current date.", "date");
-    QCommandLineOption option_wi(QStringList() << "wi" << "week-index", "get week index by date.");
+    QCommandLineOption option_wi(QStringList() << "w" << "week-index", "get week index by date.");
 
     QCommandLineParser parser;
 
@@ -37,6 +40,8 @@ int main(int argc, char *argv[])
     parser.addOption(option_email);
     parser.addOption(option_pass);
     parser.addOption(option_data);
+    parser.addOption(option_command);
+    parser.addOption(option_file);
     parser.addOption(option_date);
     parser.addOption(option_wi);
 
@@ -55,9 +60,36 @@ int main(int argc, char *argv[])
 
     Weekly weekly;
 
-    if(parser.isSet(option_email) && parser.isSet(option_pass) && parser.isSet(option_data)) {
-        if(weekly.commitWeekly(parser.value(option_email), parser.value(option_pass),
-                               parser.value(option_data), parser.value(option_date))) {
+    if(parser.isSet(option_email) && parser.isSet(option_pass)) {
+        QString data;
+
+        if(parser.isSet(option_data)) {
+            data = parser.value(option_data);
+        } else if(parser.isSet(option_command)) {
+            QProcess process;
+
+            process.start(parser.value(option_command));
+
+            if(process.waitForFinished()) {
+                data = QString::fromUtf8(process.readAll());
+            } else {
+                PrintError() << process.errorString();
+
+                return -1;
+            }
+        } else if(parser.isSet(option_file)) {
+            QFile file(parser.value(option_file));
+
+            if(file.open(QIODevice::ReadOnly)) {
+                data = QString::fromUtf8(file.readAll());
+            } else {
+                PrintError() << file.errorString();
+
+                return -1;
+            }
+        }
+
+        if(weekly.commitWeekly(parser.value(option_email), parser.value(option_pass), parser.value(option_data), data)) {
             return a.exec();
         }
     }

@@ -211,7 +211,7 @@ void Weekly::onGetEditWeeklyPageFinished()
                 }
 
                 if(json_obj["success"].toBool()) {
-                    PrintError.print("Success");
+                    std::cout << "Success" << std::endl;
 
                     qApp->quit();
                 }
