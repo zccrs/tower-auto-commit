@@ -30,9 +30,11 @@ Weekly::Weekly(QObject *parent) : QObject(parent)
     m_networkManager = new QNetworkAccessManager(this);
 }
 
-bool Weekly::commitWeekly(const QString &email, const QString &pass, const QString &content_json, const QString &date)
+bool Weekly::commitWeekly(const QString &email, const QString &pass, const QByteArray &content_json, const QString &date)
 {
-    const QJsonDocument json_doc = QJsonDocument::fromJson(content_json.toUtf8());
+    PrintError::print(content_json);
+
+    const QJsonDocument json_doc = QJsonDocument::fromJson(content_json);
 
     if(!json_doc.isArray()) {
         pError() << "Data is not json array.";
@@ -297,7 +299,7 @@ void Weekly::httpRequest(Function slot, const QByteArray &url,
 
     connect(reply, &QNetworkReply::finished, this, slot);
 
-    qDebug() << "request url:" << url << " data:" << QByteArray::fromPercentEncoding(data);
+    qDebug() << "request url:" << url << " data:" << QString::fromUtf8(QByteArray::fromPercentEncoding(data));
 }
 
 

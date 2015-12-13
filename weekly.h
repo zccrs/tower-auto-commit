@@ -14,11 +14,10 @@ class Weekly : public QObject
 public:
     explicit Weekly(QObject *parent = 0);
 
-    bool commitWeekly(const QString &email, const QString &pass, const QString &content_json, const QString &date);
+    bool commitWeekly(const QString &email, const QString &pass, const QByteArray &content_json, const QString &date);
 
     static QDate getWeekStartDate(const QDate &date);
     static int getWeekNumber(const QDate &date, int *year);
-    QByteArray getTargetWeek() const;
 
 private:
     Q_SLOT void onInitCookieFinished();
@@ -28,6 +27,7 @@ private:
     Q_SLOT void onGetEditWeeklyPageFinished();
 
 
+    QByteArray getTargetWeek() const;
     QByteArray getPostWeeklyUrl() const;
     QByteArray getEditWeeklyUrl() const;
 

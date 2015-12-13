@@ -61,17 +61,19 @@ int main(int argc, char *argv[])
     Weekly weekly;
 
     if(parser.isSet(option_email) && parser.isSet(option_pass)) {
-        QString data;
+        QByteArray data;
 
         if(parser.isSet(option_data)) {
-            data = parser.value(option_data);
+            data = parser.value(option_data).toUtf8();
         } else if(parser.isSet(option_command)) {
             QProcess process;
 
             process.start(parser.value(option_command));
 
             if(process.waitForFinished()) {
-                data = QString::fromUtf8(process.readAll());
+                const QByteArray d = process.readAllStandardOutput();
+
+                data = d;
             } else {
                 PrintError() << process.errorString();
 
@@ -81,7 +83,7 @@ int main(int argc, char *argv[])
             QFile file(parser.value(option_file));
 
             if(file.open(QIODevice::ReadOnly)) {
-                data = QString::fromUtf8(file.readAll());
+                data = file.readAll();
             } else {
                 PrintError() << file.errorString();
 
@@ -89,7 +91,7 @@ int main(int argc, char *argv[])
             }
         }
 
-        if(weekly.commitWeekly(parser.value(option_email), parser.value(option_pass), parser.value(option_data), data)) {
+        if(weekly.commitWeekly(parser.value(option_email), parser.value(option_pass), data, parser.value(option_date))) {
             return a.exec();
         }
     }
