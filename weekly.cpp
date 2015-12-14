@@ -30,9 +30,19 @@ Weekly::Weekly(QObject *parent) : QObject(parent)
     m_networkManager = new QNetworkAccessManager(this);
 }
 
-bool Weekly::commitWeekly(const QString &email, const QString &pass, const QByteArray &content_json, const QString &date)
+void Weekly::init(const QString &date, const QString &keyword, bool save, bool isDefault)
 {
-    PrintError::print(content_json);
+    m_targetDate = QDate::fromString(date, DATE_FORMAT);
+    m_saveCookie = save;
+    m_keyword = keyword;
+    m_default = isDefault;
+
+    qDebug() << "init:" << date << keyword << save << isDefault;
+}
+
+bool Weekly::commitWeekly(const QString &email, const QString &pass, const QByteArray &content_json)
+{
+    m_interlocutioMode = false;
 
     const QJsonDocument json_doc = QJsonDocument::fromJson(content_json);
 
@@ -44,11 +54,36 @@ bool Weekly::commitWeekly(const QString &email, const QString &pass, const QByte
 
     m_email = email.toLatin1();
     m_password = pass.toLatin1();
-    m_targetDate = QDate::fromString(date, "yyyy-M-d");
 
     for(const QJsonValue &value: json_doc.array()) {
         m_weeklyDataList << value.toString();
     }
+
+    httpRequest(&Weekly::onInitCookieFinished, url_tower);
+
+    return true;
+}
+
+bool Weekly::interlocution()
+{
+    m_interlocutioMode = true;
+
+    std::string str;
+    std::cout << "input email: ";
+    std::cin >> str;
+
+    if(str.empty())
+        return false;
+
+    m_email = QByteArray(str.data());
+
+    std::cout << "input password: ";
+    std::cin >> str;
+
+    if(str.empty())
+        return false;
+
+    m_password = QByteArray(str.data());
 
     httpRequest(&Weekly::onInitCookieFinished, url_tower);
 
@@ -173,20 +208,48 @@ void Weekly::onGetEditWeeklyPageFinished()
     if(json_obj["success"].toBool()) {
         const QString &html = json_obj["html"].toString();
 
-        QRegularExpression rx("name=\"(\\w+?)\"\\s*value=\"(\\w+?)\".*?\\s*?.*?必填");
+        QRegularExpression rx("name=\"(\\w+?)\"\\s*value=\"(\\w+?)\".*?\\s*?(.*?" + m_keyword +".*)");
         QRegularExpressionMatchIterator match = rx.globalMatch(html);
 
         if(match.isValid()) {
             QJsonArray json_data;
             int i = 0;
 
-            while(match.hasNext() && i < m_weeklyDataList.count()) {
-                QJsonObject json_obj;
+            while(match.hasNext()) {
+                ++i;
+
+                QString content;
 
                 QRegularExpressionMatch tmp = match.next();
 
+                if(m_interlocutioMode) {
+                    PrintError::print(tmp.captured(3).trimmed() + ": ");
+
+                    std::string str;
+
+                    while (std::getline(std::cin, str)) {
+                        content += QString(str.data()) + "\n";
+                    }
+
+                    std::cin.clear();
+
+                    content.endsWith('\n');
+                    content = content.left(content.count() - 1);
+                } else {
+                    if(i < m_weeklyDataList.count()) {
+                        content = m_weeklyDataList[i];
+                    } else {
+                        break;
+                    }
+                }
+
+                if(content.isEmpty())
+                    continue;
+
+                QJsonObject json_obj;
+
                 json_obj[tmp.captured(1)] = tmp.captured(2);
-                json_obj["content"] = m_weeklyDataList[i++];
+                json_obj["content"] = content.replace(" ", "&nbsp;");
 
                 json_data << json_obj;
             }
