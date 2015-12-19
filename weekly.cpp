@@ -1,3 +1,5 @@
+#include <iostream>
+
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QUrl>
@@ -6,7 +8,9 @@
 #include <QJsonArray>
 #include <QCoreApplication>
 #include <QRegularExpression>
-#include <iostream>
+#include <QSettings>
+#include <QNetworkCookieJar>
+#include <QNetworkCookie>
 
 #include "weekly.h"
 
@@ -14,10 +18,49 @@
     QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());\
     if(!reply) return;\
     if(reply->error() != QNetworkReply::NoError){\
-        zError << QString("Request %1 error: ").arg(reply->url().toString());\
+        zError << tr("Request %1 error: ").arg(reply->url().toString());\
         zError << reply->errorString();\
         zErrorQuit;\
     }\
+
+
+QString readLineFromStdin()
+{
+    QTextStream input_stream(stdin);
+
+    QString str = input_stream.readLine();
+
+    return str;
+}
+
+QVariant getValueFromConfig(const QString &key, const QString &group = "",
+                            const QVariant &default_value = QVariant())
+{
+    QSettings settings;
+
+    if(group.isEmpty())
+        return settings.value(key, default_value);
+
+    return settings.value(group + "/" + key, default_value);
+}
+
+void setValueToConfig(const QString key, const QVariant &value,
+                      const QString &group = "")
+{
+    QSettings settings;
+
+    if(group.isEmpty())
+        settings.setValue(key, value);
+    else
+        settings.setValue(group + "/" + key, value);
+}
+
+void clearConfig(const QString &key)
+{
+    QSettings settings;
+
+    settings.remove(key);
+}
 
 const QByteArray url_tower = "https://tower.im";
 const QByteArray url_login_page = url_tower + "/users/sign_in";
@@ -25,62 +68,111 @@ const QByteArray url_login_page = url_tower + "/users/sign_in";
 Weekly::Weekly(QObject *parent) : QObject(parent)
 {
     m_networkManager = new QNetworkAccessManager(this);
+
+    m_cookieJar = new CookieJar(this);
+
+    m_networkManager->setCookieJar(m_cookieJar);
 }
 
-void Weekly::init(const QString &date, const QString &keyword, bool save, bool isDefault)
+void Weekly::init(const QByteArray &email, const QByteArray &pass,
+                  const QString &date, const QString &keyword,
+                  bool save, bool isDefault)
 {
+    m_email = email;
+
+    do{
+        if(m_email.isEmpty()) {
+            if(isDefault) {
+                QByteArray default_email = getValueFromConfig("default_email").toByteArray();
+
+                if(!default_email.isEmpty()) {
+                    m_email = default_email;
+                    break;
+                }
+            }
+
+            zPrint << tr("input email: ");
+
+            m_email = readLineFromStdin().toUtf8();
+
+            if(m_email.isEmpty()) {
+                zQuit;
+            }
+        }
+    }while(false);
+
+    zPrint << tr("current email is:") << m_email;
+
+    m_password = getValueFromConfig("password", m_email).toByteArray();
+
+    if(!pass.isEmpty()) {
+        if(!m_password.isEmpty() && m_password != pass) {
+            query_user:
+
+            zPrint << tr("Enter the password and saved locally inconsistent, whether to update the saved data? [n/Y]");
+
+            QString str = readLineFromStdin();
+
+            if(str.toUpper() == "Y" || str.isEmpty()) {
+                clearConfig(m_email);
+
+                m_password = pass;
+            } else if(str.toUpper() != "N") {
+                goto query_user;
+            }
+        }
+    } else if(m_password.isEmpty()){
+        zPrint << tr("input password: ");
+
+        m_password = readLineFromStdin().toUtf8();
+
+        if(m_password.isEmpty())
+            zQuit;
+    }
+
     m_targetDate = QDate::fromString(date, DATE_FORMAT);
     m_saveCookie = save;
     m_keyword = keyword;
-    m_default = isDefault;
-}
 
-bool Weekly::commitWeekly(const QString &email, const QString &pass, const QByteArray &content_json)
-{
-    m_interlocutioMode = false;
-
-    const QJsonDocument json_doc = QJsonDocument::fromJson(content_json);
-
-    if(!json_doc.isArray()) {
-        zError << "Data is not json array.";
-
-        return false;
+    if(save) {
+        setValueToConfig("password", m_password, m_email);
     }
 
-    m_email = email.toLatin1();
-    m_password = pass.toLatin1();
-
-    for(const QJsonValue &value: json_doc.array()) {
-        m_weeklyDataList << value.toString();
+    if(isDefault) {
+        setValueToConfig("default_email", m_email);
     }
-
-    httpRequest(&Weekly::onInitCookieFinished, url_tower);
-
-    return true;
 }
 
-bool Weekly::interlocution()
+bool Weekly::commitWeekly(const QByteArray &content_json)
 {
-    m_interlocutioMode = true;
+    if(content_json.isEmpty()) {
+        m_interlocutioMode = true;
+    } else {
+        const QJsonDocument json_doc = QJsonDocument::fromJson(content_json);
 
-    std::string str;
-    std::cout << "input email: ";
-    std::cin >> str;
+        if(!json_doc.isArray()) {
+            zError << tr("Data is not json array.");
 
-    if(str.empty())
-        return false;
+            return false;
+        }
 
-    m_email = QByteArray(str.data());
+        for(const QJsonValue &value: json_doc.array()) {
+            m_weeklyDataList << value.toString();
+        }
+    }
 
-    std::cout << "input password: ";
-    std::cin >> str;
+    QVariant cookies = getValueFromConfig("cookies", m_email).toByteArray();
+    m_csrf_token = getValueFromConfig("csrf_token", m_email).toByteArray();
+    m_members_id = getValueFromConfig("members_id", m_email).toByteArray();
 
-    if(str.empty())
-        return false;
+    if(cookies.isValid() && !m_csrf_token.isEmpty() && !m_members_id.isEmpty()) {
+        m_cookieJar->initCookies(cookies);
 
-    m_password = QByteArray(str.data());
-
-    httpRequest(&Weekly::onInitCookieFinished, url_tower);
+        httpRequest(&Weekly::onGetEditWeeklyPageFinished, getEditWeeklyUrl());
+        /// get edit weekly page, and post weekly;
+    } else {
+        httpRequest(&Weekly::onInitCookieFinished, url_tower);
+    }
 
     return true;
 }
@@ -92,10 +184,12 @@ void Weekly::onInitCookieFinished()
     reply->deleteLater();
 
     httpRequest(&Weekly::onGetLoginPageFinished, url_login_page);
+    /// init csrf-token
 }
 
+
 void Weekly::onGetLoginPageFinished()
-{
+{   
     GET_REPLY
 
     const QByteArray &data = reply->readAll();
@@ -111,6 +205,9 @@ void Weekly::onGetLoginPageFinished()
             if(tmp_list.count() > 1) {
                 m_csrf_token = tmp_list[1];
 
+                if(m_saveCookie)
+                    setValueToConfig("csrf_token", m_csrf_token, m_email);
+
                 reply->deleteLater();
 
                 QByteArray data = "email=" + m_email +"&password=" + m_password;
@@ -120,6 +217,7 @@ void Weekly::onGetLoginPageFinished()
                 rawHeader["X-CSRF-Token"] = m_csrf_token;
 
                 httpRequest(&Weekly::onLoginFinished, url_login_page, data, rawHeader);
+                /// login.
             }
         }
     }
@@ -161,6 +259,7 @@ void Weekly::onLoginFinished()
 
                     if(tmp_list.count() > 1) {
                         httpRequest(&Weekly::onGetProjectsPageFinished, tmp_list[1]);
+                        /// get projects page.
                     }
 
                 }, tmp_list[1]);
@@ -183,7 +282,11 @@ void Weekly::onGetProjectsPageFinished()
     if(match.isValid()) {
         m_members_id = match.captured().toLatin1();
 
+        if(m_saveCookie)
+            setValueToConfig("members_id", m_members_id, m_email);
+
         httpRequest(&Weekly::onGetEditWeeklyPageFinished, getEditWeeklyUrl());
+        /// get edit weekly page.
     } else {
         zError << rx.errorString();
 
@@ -207,13 +310,20 @@ void Weekly::onGetEditWeeklyPageFinished()
     }
 
     if(json_obj["success"].toBool()) {
+        if(m_saveCookie) {
+            QVariant cookie_list = m_cookieJar->getCookies();
+
+            setValueToConfig("cookies", cookie_list, m_email);
+        }
+
         const QString &html = json_obj["html"].toString();
 
-        QRegularExpression rx("name=\"(\\w+?)\"\\s*value=\"(\\w+?)\".*?\\s*?(.*?" + m_keyword +".*)");
+        QRegularExpression rx("name=\"(<request_type>\\w+?)\"\\s*value=\"(<request_id>\\w+?)\".*?\\s*?(<message>.*?" + m_keyword +".*)");
         QRegularExpressionMatchIterator match = rx.globalMatch(html);
 
         if(match.isValid()) {
             QJsonArray json_data;
+
             int i = 0;
 
             while(match.hasNext()) {
@@ -224,7 +334,7 @@ void Weekly::onGetEditWeeklyPageFinished()
                 QRegularExpressionMatch tmp = match.next();
 
                 if(m_interlocutioMode) {
-                    zPrint.nospace() << tmp.captured(3).trimmed() << ": ";
+                    zPrint.nospace() << tmp.captured("message").trimmed() << ": ";
 
                     std::string str;
 
@@ -249,14 +359,17 @@ void Weekly::onGetEditWeeklyPageFinished()
 
                 QJsonObject json_obj;
 
-                json_obj[tmp.captured(1)] = tmp.captured(2);
+                json_obj[tmp.captured("request_type")] = tmp.captured("request_id");
                 json_obj["content"] = content.replace(" ", "&nbsp;");
 
                 json_data << json_obj;
+
+                zDebug << "message:" << tmp.captured("message");
+                zDebug << json_obj;
             }
 
             if(json_data.isEmpty()) {
-                zError << "get weekly_item_guid failed.";
+                zError << tr("weekly content is empty.");
 
                 zErrorQuit;
             }
@@ -369,5 +482,40 @@ void Weekly::httpRequest(Function slot, const QByteArray &url,
 
     connect(reply, &QNetworkReply::finished, this, slot);
 
-    zInfo << "request url:" << url << " data:" << QString::fromUtf8(QByteArray::fromPercentEncoding(data));
+    zInfo << tr("request url:") << url;
+
+    if(!data.isEmpty()) {
+        zInfo << tr("request data:") << QString::fromUtf8(QByteArray::fromPercentEncoding(data));
+    }
+}
+
+CookieJar::CookieJar(QObject *parent) :
+    QNetworkCookieJar(parent)
+{
+
+}
+
+QList<QNetworkCookie> CookieJar::cookiesForUrl(const QUrl &) const
+{
+    return QNetworkCookieJar::allCookies();
+}
+
+bool CookieJar::initCookies(const QVariant &cookies)
+{
+    QList<QNetworkCookie> cookie_list = QNetworkCookie::parseCookies(cookies.toByteArray());
+
+    setAllCookies(cookie_list);
+
+    return !cookie_list.isEmpty();
+}
+
+QVariant CookieJar::getCookies() const
+{
+    QByteArray array;
+
+    for(const QNetworkCookie &cookie : allCookies()) {
+        array.append(cookie.toRawForm(QNetworkCookie::NameAndValueOnly)).append("\n");
+    }
+
+    return array;
 }
