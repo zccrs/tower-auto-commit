@@ -10,16 +10,13 @@
 
 #include "weekly.h"
 
-#define pError PrintError
-
 #define GET_REPLY \
     QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());\
     if(!reply) return;\
     if(reply->error() != QNetworkReply::NoError){\
-        PrintError::print(QString("Request %1 error: ").arg(reply->url().toString()));\
-        PrintError::print(reply->errorString());\
-        PrintError::print(reply->readAll());\
-        qApp->quit();\
+        zError << QString("Request %1 error: ").arg(reply->url().toString());\
+        zError << reply->errorString();\
+        zErrorQuit;\
     }\
 
 const QByteArray url_tower = "https://tower.im";
@@ -36,8 +33,6 @@ void Weekly::init(const QString &date, const QString &keyword, bool save, bool i
     m_saveCookie = save;
     m_keyword = keyword;
     m_default = isDefault;
-
-    qDebug() << "init:" << date << keyword << save << isDefault;
 }
 
 bool Weekly::commitWeekly(const QString &email, const QString &pass, const QByteArray &content_json)
@@ -47,7 +42,7 @@ bool Weekly::commitWeekly(const QString &email, const QString &pass, const QByte
     const QJsonDocument json_doc = QJsonDocument::fromJson(content_json);
 
     if(!json_doc.isArray()) {
-        pError() << "Data is not json array.";
+        zError << "Data is not json array.";
 
         return false;
     }
@@ -142,7 +137,9 @@ void Weekly::onLoginFinished()
     const QJsonArray &errors = json_obj["errors"].toArray();
 
     for(const QJsonValue &value : errors) {
-        PrintError::print(value.toObject()["msg"].toString());
+        zError << (value.toObject()["msg"].toString());
+
+        zErrorQuit;
     }
 
     if(!errors.isEmpty())
@@ -188,7 +185,9 @@ void Weekly::onGetProjectsPageFinished()
 
         httpRequest(&Weekly::onGetEditWeeklyPageFinished, getEditWeeklyUrl());
     } else {
-        pError() << rx.errorString();
+        zError << rx.errorString();
+
+        zErrorQuit;
     }
 }
 
@@ -202,7 +201,9 @@ void Weekly::onGetEditWeeklyPageFinished()
     const QJsonArray &errors = json_obj["errors"].toArray();
 
     for(const QJsonValue &value : errors) {
-        pError() << value.toObject()["msg"].toString();
+        zError << value.toObject()["msg"].toString();
+
+        zErrorQuit;
     }
 
     if(json_obj["success"].toBool()) {
@@ -223,7 +224,7 @@ void Weekly::onGetEditWeeklyPageFinished()
                 QRegularExpressionMatch tmp = match.next();
 
                 if(m_interlocutioMode) {
-                    PrintError::print(tmp.captured(3).trimmed() + ": ");
+                    zPrint.nospace() << tmp.captured(3).trimmed() << ": ";
 
                     std::string str;
 
@@ -255,7 +256,9 @@ void Weekly::onGetEditWeeklyPageFinished()
             }
 
             if(json_data.isEmpty()) {
-                pError() << "get weekly_item_guid failed.";
+                zError << "get weekly_item_guid failed.";
+
+                zErrorQuit;
             }
 
             const QByteArray request_data = "data=" + QJsonDocument(json_data).toJson(QJsonDocument::Compact).toPercentEncoding()
@@ -272,17 +275,21 @@ void Weekly::onGetEditWeeklyPageFinished()
                 const QJsonArray &errors = json_obj["errors"].toArray();
 
                 for(const QJsonValue &value : errors) {
-                    pError() << value.toObject()["msg"].toString();
+                    zError << value.toObject()["msg"].toString();
                 }
 
                 if(json_obj["success"].toBool()) {
-                    std::cout << "Success" << std::endl;
+                    zPrint << "Success";
 
-                    qApp->quit();
+                    zQuit;
+                } else {
+                    zErrorQuit;
                 }
             }, getPostWeeklyUrl(), request_data, rawHeader);
         } else {
-            pError() << rx.errorString();
+            zError << rx.errorString();
+
+            zErrorQuit;
         }
     }
 }
@@ -362,33 +369,5 @@ void Weekly::httpRequest(Function slot, const QByteArray &url,
 
     connect(reply, &QNetworkReply::finished, this, slot);
 
-    qDebug() << "request url:" << url << " data:" << QString::fromUtf8(QByteArray::fromPercentEncoding(data));
-}
-
-
-void PrintError::print(const QString &str)
-{
-    std::cout << qPrintable(str) << std::endl;
-}
-
-void PrintError::operator<<(const QString &str)
-{
-    if(str.isEmpty())
-        return;
-
-    print(str);
-
-    qApp->exit(-1);
-}
-
-void PrintError::operator<<(const QStringList &list)
-{
-    if(list.isEmpty())
-        return;
-
-    for(const QString str : list) {
-        print(str);
-    }
-
-    qApp->exit(-1);
+    zInfo << "request url:" << url << " data:" << QString::fromUtf8(QByteArray::fromPercentEncoding(data));
 }

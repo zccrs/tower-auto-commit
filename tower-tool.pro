@@ -1,7 +1,7 @@
 QT += core network
 QT -= gui
 
-TARGET = tower-auto-commit
+TARGET = tower-tool
 CONFIG += console c++11
 CONFIG -= app_bundle
 
@@ -13,3 +13,7 @@ SOURCES += main.cpp \
 HEADERS += \
     weekly.h
 
+TRANSLATIONS += i18n/tower-tool_zh_CN.ts
+
+RESOURCES += \
+    resource.qrc

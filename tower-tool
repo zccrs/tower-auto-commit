@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE TS>
+<TS version="2.1">
+<context>
+    <name>QObject</name>
+    <message>
+        <location filename="main.cpp" line="29"/>
+        <source>email address.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="main.cpp" line="30"/>
+        <source>password.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="main.cpp" line="31"/>
+        <source>date, format=</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="main.cpp" line="32"/>
+        <source>get week index by date.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="main.cpp" line="33"/>
+        <source>save user info to local.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="main.cpp" line="34"/>
+        <source>set as default user.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="main.cpp" line="35"/>
+        <source>clear info([user|default]).</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="main.cpp" line="36"/>
+        <source>according keyword filter weekly item(keyword format is regular expressions, default is 必填).</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="main.cpp" line="37"/>
+        <source>setting get weekly modes
+([</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="main.cpp" line="54"/>
+        <source>mode == </source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+</TS>

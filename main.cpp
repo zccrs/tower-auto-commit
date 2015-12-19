@@ -5,6 +5,8 @@
 #include <QRegularExpression>
 #include <QFile>
 #include <QProcess>
+#include <QTranslator>
+#include <QLibraryInfo>
 
 #include "weekly.h"
 
@@ -16,9 +18,12 @@ int main(int argc, char *argv[])
 {
     QCoreApplication a(argc, argv);
 
-    a.setApplicationName("tower auto commit");
+    a.setApplicationName("tower-tool");
     a.setApplicationVersion("1.0.0");
 
+    QTranslator translator;
+    translator.load(":/i18n/" + a.applicationName() + "_" + QLocale::system().name());
+    a.installTranslator(&translator);
 //    QNetworkProxy proxy;
 
 //    proxy.setHostName("127.0.0.1");
@@ -26,19 +31,19 @@ int main(int argc, char *argv[])
 //    proxy.setType(QNetworkProxy::HttpProxy);
 //    proxy.setApplicationProxy(proxy);
 
-    QCommandLineOption option_email(QStringList() << "e" << "email", "email address.", "email");
-    QCommandLineOption option_pass(QStringList() << "p" << "password", "password.", "password");
-    QCommandLineOption option_date(QStringList() << "d" << "date", "date, format=" DATE_FORMAT ", default is system current date.", "date");
-    QCommandLineOption option_wi(QStringList() << "w" << "week-index", "get week index by date.");
-    QCommandLineOption option_save("save", "save user info to local.");
-    QCommandLineOption option_default("default", "set as default user.");
-    QCommandLineOption option_clear(QStringList() << "c" << "clear", "clear info([user|default]).", "clear");
-    QCommandLineOption option_filter(QStringList() << "f" << "filter", "according keyword filter weekly item(keyword format is regular expressions, default is 必填).", "keyword");
-    QCommandLineOption option_mode(QStringList() << "m" << "mode", "setting get weekly modes"
-                                           "\n([" MODE_INPUT "|" MODE_FILE "|" MODE_COMMAND "], default=" MODE_INPUT ")."
-                                           "\ninput: key in data (format=JSON)."
+    QCommandLineOption option_email(QStringList() << "e" << "email", QObject::tr("email address."), "email");
+    QCommandLineOption option_pass(QStringList() << "p" << "password", QObject::tr("password."), "password");
+    QCommandLineOption option_date(QStringList() << "d" << "date", QObject::tr("date, format=") + DATE_FORMAT + QObject::tr(", default is system current date."), "date");
+    QCommandLineOption option_wi(QStringList() << "w" << "week-index", QObject::tr("get week index by date."));
+    QCommandLineOption option_save("save", QObject::tr("save user info to local."));
+    QCommandLineOption option_default("default", QObject::tr("set as default user."));
+    QCommandLineOption option_clear(QStringList() << "c" << "clear", QObject::tr("clear info([user|default])."), "clear");
+    QCommandLineOption option_filter(QStringList() << "f" << "filter", QObject::tr("according keyword filter weekly item(keyword format is regular expressions, default is 必填)."), "keyword");
+    QCommandLineOption option_mode(QStringList() << "m" << "mode", QObject::tr("setting get weekly modes") +
+                                           "\n([" MODE_INPUT "|" MODE_FILE "|" MODE_COMMAND + QObject::tr("], default=") + MODE_INPUT ")."
+                                            + QObject::tr("\ninput: key in data (format=JSON)."
                                            "\nfile: the contents of the file as weekly data (text-encoding=UTF-8, format=JSON)."
-                                           "\ncommand: exec command, it returns the contents as weekly data (text-encoding=UTF-8, format=JSON).", "mode");
+                                           "\ncommand: exec command, it returns the contents as weekly data (text-encoding=UTF-8, format=JSON)."), "mode");
 
     option_date.setDefaultValue(QDate::currentDate().toString(DATE_FORMAT));
     option_mode.setDefaultValue(MODE_INPUT);
@@ -51,9 +56,9 @@ int main(int argc, char *argv[])
 
     QCommandLineParser parser;
 
-    parser.addPositionalArgument("data", "mode == " MODE_INPUT "is weekly data."
-                                         "\nmode == " MODE_FILE "is file path."
-                                         "\nmode == " MODE_COMMAND "is command and arguments.");
+    parser.addPositionalArgument("data", QObject::tr("mode == ") + MODE_INPUT + QObject::tr("is weekly data.")
+                                         + QObject::tr("\nmode == ") + MODE_FILE + QObject::tr("is file path."
+                                         "\nmode == ") + MODE_COMMAND + QObject::tr("is command and arguments."));
     parser.setApplicationDescription(a.applicationName());
     parser.addHelpOption();
     parser.addVersionOption();
@@ -66,9 +71,9 @@ int main(int argc, char *argv[])
 
         const QString str = QString::number(year) + " " + QString::number(week_index);
 
-        PrintError() << str;
+        zPrint << str;
 
-        return 0;
+        zQuit;
     }
 
     Weekly weekly;
@@ -93,9 +98,9 @@ int main(int argc, char *argv[])
 
                 data = d;
             } else {
-                PrintError() << process.errorString();
+                zError << process.errorString();
 
-                return -1;
+                zErrorQuit;
             }
         } else if(parser.value(option_mode) == MODE_FILE) {
             QFile file(arguments.first());
@@ -103,10 +108,14 @@ int main(int argc, char *argv[])
             if(file.open(QIODevice::ReadOnly)) {
                 data = file.readAll();
             } else {
-                PrintError() << file.errorString();
+                zError << file.errorString();
 
-                return -1;
+                zErrorQuit;
             }
+        } else {
+            zError << QObject::tr("Unsupported %1 mode").arg(parser.value(option_mode));
+
+            zErrorQuit;
         }
 
         if(weekly.commitWeekly(parser.value(option_email), parser.value(option_pass), data)) {
@@ -116,7 +125,7 @@ int main(int argc, char *argv[])
         if(weekly.interlocution()){
             return a.exec();
         } else {
-            return -1;
+            zErrorQuit;
         }
     }
 

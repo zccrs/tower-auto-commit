@@ -4,6 +4,16 @@
 #include <QObject>
 #include <QVariantMap>
 #include <QDate>
+#include <QTextStream>
+
+#define zDebug qDebug().noquote() << "Debug:"
+#define zError qCritical().noquote() << "Error:"
+#define zInfo qInfo().noquote() << "Info:"
+#define zWarning qWarning().noquote() << "Warning:"
+#define zPrint qDebug().noquote()
+#define zExit(code) exit(code)
+#define zErrorQuit zExit(-1)
+#define zQuit zExit(0)
 
 #define DATE_FORMAT "yyyy-M-d"
 
@@ -56,17 +66,5 @@ private:
     bool m_default = false;
     bool m_interlocutioMode = false;
 };
-
-class PrintError
-{
-public:
-    PrintError(){}
-
-    static void print(const QString &str);
-
-    void operator<<(const QString &str);
-    void operator<<(const QStringList &list);
-};
-
 
 #endif // WEEKLY_H
