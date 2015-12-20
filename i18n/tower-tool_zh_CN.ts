@@ -24,28 +24,45 @@
         <translation>日期（格式=yyyy-M-d），默认是系统当前时间</translation>
     </message>
     <message>
+        <location filename="../main.cpp" line="70"/>
+        <source>input weekly mode([input|file|command], we will use dialogue mode is not set).</source>
+        <translation>输入周报的模式（[input|file|command]，未指定时将使用对话模式询问所有周报必填项）</translation>
+    </message>
+    <message>
         <location filename="../main.cpp" line="72"/>
         <source>if you specify the email then set as default user, else use the default user as a email value.</source>
-        <translation>如果指定了email则设置此email为默认，否则使用当前记录的默认email作为此次请求的email</translation>
+        <translation>如果指定了email则设置此email为默认，否则使用当前记录的默认email登录</translation>
     </message>
     <message>
         <location filename="../main.cpp" line="73"/>
         <source>clear info([user|default|record|all]).
 --clear=user: clear user info.
 --clear=default: clear default email.
+--clear=all: clear all config(contain record).
 --clear=record: clear record, if not set record then clear all record.</source>
         <translation>清除信息（[user|default|record|all]）
+--clear=user：清除当前用户的信息（根据email的值）
+--clear=default：清除默认的email
+--clear=all：清空配置文件（record的记录也会清除）
+--clear=record：清除指定的命令记录，如果未指定--record，则清除全部的命令记录</translation>
+    </message>
+    <message>
+        <source>clear info([user|default|record|all]).
+--clear=user: clear user info.
+--clear=default: clear default email.
+--clear=record: clear record, if not set record then clear all record.</source>
+        <translation type="vanished">清除信息（[user|default|record|all]）
 --clear=user：清除当前用户的信息（根据email的值）
 --clear=default：清除默认的email
 --clear=record：清除指定的命令记录，如果未指定--record，则清除全部的命令记录</translation>
     </message>
     <message>
-        <location filename="../main.cpp" line="77"/>
+        <location filename="../main.cpp" line="78"/>
         <source>record this command and assign a name, if the name exists  then replace command.</source>
         <translation>记录当前输入的命令。记录过的命令可以直接根据记录名称来执行，例如：“tower-tool --record a -w”，则执行“tower-tool --exec a”等同于执行“tower-tool -w”</translation>
     </message>
     <message>
-        <location filename="../main.cpp" line="78"/>
+        <location filename="../main.cpp" line="79"/>
         <source>execute recorded command.</source>
         <translation>执行已记录的命令</translation>
     </message>
@@ -54,9 +71,15 @@
         <source>--mode=input: weekly data(format=JSON).
 --mode=file: file path(text-encoding=UTF-8, format=JSON).
 --mode=command: command and arguments(text-encoding=UTF-8, format=JSON).</source>
-        <translation>--mode=input：直接输入周报内容（格式=JSON）
---mode=file：输入文件路径，将文件内容作为周报的内容（文本格式=UTF-8，内容格式=JSON）
---mode=command：输入要执行的命令，将程序返回结果作为周报内容（内容格式=JSON）</translation>
+        <translation>
+--mode=input：直接输入周报内容（格式=JSON）
+--mode=file：输入文件路径，将文件内容作为周报的内容（编码=UTF-8，格式=JSON）
+--mode=command：输入要执行的命令，将程序返回结果作为周报内容（格式=JSON）</translation>
+    </message>
+    <message>
+        <location filename="../main.cpp" line="92"/>
+        <source>weekly data</source>
+        <translation>周报数据</translation>
     </message>
     <message>
         <location filename="../main.cpp" line="129"/>
@@ -65,13 +88,21 @@
     </message>
     <message>
         <location filename="../main.cpp" line="167"/>
-        <source>Will be %1 replacement for the %2.</source>
+        <source>Will be &quot;%1&quot; replacement for the &quot;%2&quot;.</source>
         <translation>将使用“%1”替换掉“%2”</translation>
     </message>
     <message>
-        <location filename="../main.cpp" line="182"/>
+        <source>Will be %1 replacement for the %2.</source>
+        <translation type="vanished">将使用“%1”替换掉“%2”</translation>
+    </message>
+    <message>
+        <location filename="../main.cpp" line="215"/>
+        <source>weekly content is empty.</source>
+        <translation>获取到的周报内容是空的</translation>
+    </message>
+    <message>
         <source>arguments is empty.</source>
-        <translation>参数是空的</translation>
+        <translation type="vanished">参数是空的</translation>
     </message>
     <message>
         <source>date, format=</source>
@@ -87,9 +118,8 @@
         <translation>获取指定日期是哪年的第几周</translation>
     </message>
     <message>
-        <location filename="../main.cpp" line="70"/>
         <source>input weekly mode([input|file|command], default=input).</source>
-        <translation>获取周报内容的模式（[input|file|command]，默认=input）</translation>
+        <translation type="vanished">获取周报内容的模式（[input|file|command]，默认=input）</translation>
     </message>
     <message>
         <location filename="../main.cpp" line="71"/>
@@ -175,24 +205,58 @@ command：将执行命令返回的数据作为周报内容（数据格式=JSON�
         <translation>请输入密码：</translation>
     </message>
     <message>
-        <location filename="../weekly.cpp" line="154"/>
+        <location filename="../weekly.cpp" line="155"/>
         <source>Data is not json array.</source>
         <translation>数据格式不是JSON数组</translation>
     </message>
     <message>
-        <location filename="../weekly.cpp" line="372"/>
+        <location filename="../weekly.cpp" line="326"/>
+        <source>invalid regular expression:</source>
+        <translation>无效的正则表达式：</translation>
+    </message>
+    <message>
+        <location filename="../weekly.cpp" line="333"/>
+        <source>weekly match any item not found, regular expression pattern is:</source>
+        <translation>未找到符合规则的周报项，正则表达式内容是：</translation>
+    </message>
+    <message>
+        <location filename="../weekly.cpp" line="351"/>
+        <source>(Press Ctrl+D to the next step): </source>
+        <translation>按下Ctrl+D可进行下一项的输入</translation>
+    </message>
+    <message>
+        <location filename="../weekly.cpp" line="381"/>
+        <source>title:</source>
+        <translation>标题：</translation>
+    </message>
+    <message>
+        <location filename="../weekly.cpp" line="382"/>
+        <source>content:</source>
+        <translation>内容：</translation>
+    </message>
+    <message>
+        <location filename="../weekly.cpp" line="386"/>
         <source>weekly content is empty.</source>
         <translation>输入的周报内容是空的</translation>
     </message>
     <message>
-        <location filename="../weekly.cpp" line="485"/>
+        <location filename="../weekly.cpp" line="409"/>
+        <source>Success</source>
+        <translation>完成</translation>
+    </message>
+    <message>
+        <location filename="../weekly.cpp" line="417"/>
+        <source>invalid regular regular expression match iterator:</source>
+        <translation>正则表达式匹配的结果是无效的：</translation>
+    </message>
+    <message>
+        <location filename="../weekly.cpp" line="499"/>
         <source>request url:</source>
         <translation>目标url：</translation>
     </message>
     <message>
-        <location filename="../weekly.cpp" line="488"/>
         <source>request data:</source>
-        <translation>附带的数据：</translation>
+        <translation type="vanished">附带的数据：</translation>
     </message>
 </context>
 </TS>

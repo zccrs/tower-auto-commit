@@ -67,18 +67,18 @@ int main(int argc, char *argv[])
     QCommandLineOption option_date(QStringList() << "d" << "date", QObject::tr("date(format=yyyy-M-d), default is system current date."), "date");
     QCommandLineOption option_wi(QStringList() << "w" << "week-index", QObject::tr("get week index by date."));
     QCommandLineOption option_filter(QStringList() << "f" << "filter", QObject::tr("according keyword filter weekly item(keyword format is regular expressions, default is 必填)."), "keyword");
-    QCommandLineOption option_mode("mode", QObject::tr("input weekly mode([input|file|command], default=input)."), "mode");
+    QCommandLineOption option_mode("mode", QObject::tr("input weekly mode([input|file|command], we will use dialogue mode is not set)."), "mode");
     QCommandLineOption option_save("save", QObject::tr("save user info to local."));
     QCommandLineOption option_default("default", QObject::tr("if you specify the email then set as default user, else use the default user as a email value."));
     QCommandLineOption option_clear("clear", QObject::tr("clear info([user|default|record|all])."
                                                          "\n--clear=user: clear user info."
                                                          "\n--clear=default: clear default email."
+                                                         "\n--clear=all: clear all config(contain record)."
                                                          "\n--clear=record: clear record, if not set record then clear all record."), "clear");
     QCommandLineOption option_record("record", QObject::tr("record this command and assign a name, if the name exists  then replace command."), "name");
     QCommandLineOption option_exec("exec", QObject::tr("execute recorded command."), "name");
 
     option_date.setDefaultValue(QDate::currentDate().toString(DATE_FORMAT));
-    option_mode.setDefaultValue("input");
     option_filter.setDefaultValue("必填");
 
     QList<QCommandLineOption> option_list;
@@ -89,7 +89,7 @@ int main(int argc, char *argv[])
 
     QCommandLineParser parser;
 
-    parser.addPositionalArgument("data", QObject::tr("--mode=input: weekly data(format=JSON)."
+    parser.addPositionalArgument(QObject::tr("weekly data"), QObject::tr("--mode=input: weekly data(format=JSON)."
                                                      "\n--mode=file: file path(text-encoding=UTF-8, format=JSON)."
                                                      "\n--mode=command: command and arguments(text-encoding=UTF-8, format=JSON)."));
     parser.setApplicationDescription(a.applicationName());
@@ -164,7 +164,7 @@ int main(int argc, char *argv[])
         QStringList list = settings.value("record/" + parser.value(option_record)).toStringList();
 
         if(!list.isEmpty()) {
-            zWarning << QObject::tr("Will be %1 replacement for the %2.").arg(argv.join(' ')).arg(list.join(' '));
+            zWarning << QObject::tr("Will be \"%1\" replacement for the \"%2\".").arg(argv.join(' ')).arg(list.join(' '));
         }
 
         settings.setValue("record/" + parser.value(option_record), argv);
@@ -178,42 +178,44 @@ int main(int argc, char *argv[])
 
     const QStringList arguments = parser.positionalArguments();
 
-    if(arguments.isEmpty()) {
-        zError << QObject::tr("arguments is empty.");
-
-        parser.showHelp(-1);
-    }
-
     QByteArray data;
 
-    if(parser.value(option_mode) == "input") {
-        data = arguments.first().toUtf8();
-    } else if(parser.value(option_mode) == "command") {
-        QProcess process;
+    if(!arguments.isEmpty() && parser.isSet(option_mode)) {
+        if(parser.value(option_mode) == "input") {
+            data = arguments.first().toUtf8();
+        } else if(parser.value(option_mode) == "command") {
+            QProcess process;
 
-        process.start(arguments.first());
+            process.start(arguments.first());
 
-        if(process.waitForFinished()) {
-            const QByteArray d = process.readAllStandardOutput();
+            if(process.waitForFinished()) {
+                const QByteArray d = process.readAllStandardOutput();
 
-            data = d;
+                data = d;
+            } else {
+                zError << process.errorString();
+
+                zErrorQuit;
+            }
+        } else if(parser.value(option_mode) == "file") {
+            QFile file(arguments.first());
+
+            if(file.open(QIODevice::ReadOnly)) {
+                data = file.readAll();
+            } else {
+                zError << file.errorString();
+
+                zErrorQuit;
+            }
         } else {
-            zError << process.errorString();
-
-            zErrorQuit;
+            zValueError(option_mode);
         }
-    } else if(parser.value(option_mode) == "file") {
-        QFile file(arguments.first());
 
-        if(file.open(QIODevice::ReadOnly)) {
-            data = file.readAll();
-        } else {
-            zError << file.errorString();
+        if(data.isEmpty()) {
+            zError << QObject::tr("weekly content is empty.");
 
-            zErrorQuit;
+            parser.showHelp(-1);
         }
-    } else {
-        zValueError(option_mode);
     }
 
     if(weekly.commitWeekly(data)) {

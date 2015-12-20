@@ -126,8 +126,9 @@ void Weekly::init(const QByteArray &email, const QByteArray &pass,
 
         m_password = readLineFromStdin().toUtf8();
 
-        if(m_password.isEmpty())
+        if(m_password.isEmpty()) {
             zQuit;
+        }
     }
 
     m_targetDate = QDate::fromString(date, DATE_FORMAT);
@@ -318,23 +319,36 @@ void Weekly::onGetEditWeeklyPageFinished()
 
         const QString &html = json_obj["html"].toString();
 
-        QRegularExpression rx("name=\"(<request_type>\\w+?)\"\\s*value=\"(<request_id>\\w+?)\".*?\\s*?(<message>.*?" + m_keyword +".*)");
+        QRegularExpression rx("name=\"(?<request_type>\\w+?)\"\\s*value=\"(?<request_id>\\w+?)\".*?\\s*?(?<message>.*?" + m_keyword +".*)");
         QRegularExpressionMatchIterator match = rx.globalMatch(html);
 
+        if(!rx.isValid()) {
+            zError << tr("invalid regular expression:") << rx.pattern();
+            zError << rx.errorString();
+            zErrorQuit;
+        }
+
         if(match.isValid()) {
+            if(!match.hasNext()) {
+                zError << tr("weekly match any item not found, regular expression pattern is:");
+                zPrint << rx.pattern();
+                zErrorQuit;
+            }
+
             QJsonArray json_data;
 
-            int i = 0;
+            int i = -1;
 
             while(match.hasNext()) {
                 ++i;
 
-                QString content;
-
                 QRegularExpressionMatch tmp = match.next();
 
+                QString message = tmp.captured("message").trimmed();
+                QString content;
+
                 if(m_interlocutioMode) {
-                    zPrint.nospace() << tmp.captured("message").trimmed() << ": ";
+                    zPrint.nospace() << message << tr("(Press Ctrl+D to the next step): ");
 
                     std::string str;
 
@@ -360,12 +374,12 @@ void Weekly::onGetEditWeeklyPageFinished()
                 QJsonObject json_obj;
 
                 json_obj[tmp.captured("request_type")] = tmp.captured("request_id");
-                json_obj["content"] = content.replace(" ", "&nbsp;");
+                json_obj["content"] = content.toHtmlEscaped();
 
                 json_data << json_obj;
 
-                zDebug << "message:" << tmp.captured("message");
-                zDebug << json_obj;
+                zInfo << tr("title:") << message;
+                zPrint << tr("content:") << content;
             }
 
             if(json_data.isEmpty()) {
@@ -392,7 +406,7 @@ void Weekly::onGetEditWeeklyPageFinished()
                 }
 
                 if(json_obj["success"].toBool()) {
-                    zPrint << "Success";
+                    zPrint << tr("Success");
 
                     zQuit;
                 } else {
@@ -400,8 +414,8 @@ void Weekly::onGetEditWeeklyPageFinished()
                 }
             }, getPostWeeklyUrl(), request_data, rawHeader);
         } else {
+            zError << tr("invalid regular regular expression match iterator:");
             zError << rx.errorString();
-
             zErrorQuit;
         }
     }
@@ -484,9 +498,9 @@ void Weekly::httpRequest(Function slot, const QByteArray &url,
 
     zInfo << tr("request url:") << url;
 
-    if(!data.isEmpty()) {
-        zInfo << tr("request data:") << QString::fromUtf8(QByteArray::fromPercentEncoding(data));
-    }
+//    if(!data.isEmpty()) {
+//        zInfo << tr("request data:") << QString::fromUtf8(QByteArray::fromPercentEncoding(data));
+//    }
 }
 
 CookieJar::CookieJar(QObject *parent) :
