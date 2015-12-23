@@ -8,10 +8,10 @@ CONFIG -= app_bundle
 TEMPLATE = app
 
 SOURCES += main.cpp \
-    weekly.cpp
+    tower.cpp
 
 HEADERS += \
-    weekly.h
+    tower.h
 
 TRANSLATIONS += i18n/tower-tool_zh_CN.ts
 

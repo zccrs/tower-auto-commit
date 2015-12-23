@@ -12,7 +12,7 @@
 #include <QNetworkCookieJar>
 #include <QNetworkCookie>
 
-#include "weekly.h"
+#include "tower.h"
 
 #define GET_REPLY \
     QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());\
@@ -21,7 +21,9 @@
         zError << tr("Request %1 error: ").arg(reply->url().toString());\
         zError << reply->errorString();\
         zErrorQuit;\
-    }\
+    }
+
+#define CALEVENTABLE_GUID "b96e5a357a884c7e8c5c2ab12858dd02"
 
 
 QString readLineFromStdin()
@@ -65,7 +67,7 @@ void clearConfig(const QString &key)
 const QByteArray url_tower = "https://tower.im";
 const QByteArray url_login_page = url_tower + "/users/sign_in";
 
-Weekly::Weekly(QObject *parent) : QObject(parent)
+Tower::Tower(QObject *parent) : QObject(parent)
 {
     m_networkManager = new QNetworkAccessManager(this);
 
@@ -74,9 +76,8 @@ Weekly::Weekly(QObject *parent) : QObject(parent)
     m_networkManager->setCookieJar(m_cookieJar);
 }
 
-void Weekly::init(const QByteArray &email, const QByteArray &pass,
-                  const QString &date, const QString &keyword,
-                  bool save, bool isDefault)
+void Tower::init(const QByteArray &email, const QByteArray &pass,
+                  const QString &date, const QString &keyword, bool isDefault)
 {
     m_email = email;
 
@@ -84,6 +85,8 @@ void Weekly::init(const QByteArray &email, const QByteArray &pass,
         if(m_email.isEmpty()) {
             if(isDefault) {
                 QByteArray default_email = getValueFromConfig("default_email").toByteArray();
+
+                zDebug << default_email;
 
                 if(!default_email.isEmpty()) {
                     m_email = default_email;
@@ -103,49 +106,19 @@ void Weekly::init(const QByteArray &email, const QByteArray &pass,
 
     zPrint << tr("current email is:") << m_email;
 
-    m_password = getValueFromConfig("password", m_email).toByteArray();
-
-    if(!pass.isEmpty()) {
-        if(!m_password.isEmpty() && m_password != pass) {
-            query_user:
-
-            zPrint << tr("Enter the password and saved locally inconsistent, whether to update the saved data? [n/Y]");
-
-            QString str = readLineFromStdin();
-
-            if(str.toUpper() == "Y" || str.isEmpty()) {
-                clearConfig(m_email);
-
-                m_password = pass;
-            } else if(str.toUpper() != "N") {
-                goto query_user;
-            }
-        }
-    } else if(m_password.isEmpty()){
-        zPrint << tr("input password: ");
-
-        m_password = readLineFromStdin().toUtf8();
-
-        if(m_password.isEmpty()) {
-            zQuit;
-        }
-    }
-
     m_targetDate = QDate::fromString(date, DATE_FORMAT);
-    m_saveCookie = save;
     m_keyword = keyword;
-
-    if(save) {
-        setValueToConfig("password", m_password, m_email);
-    }
+    m_password = pass;
 
     if(isDefault) {
         setValueToConfig("default_email", m_email);
     }
 }
 
-bool Weekly::commitWeekly(const QByteArray &content_json)
+void Tower::commitWeekly(const QByteArray &content_json)
 {
+    m_type = WeeklType;
+
     if(content_json.isEmpty()) {
         m_interlocutioMode = true;
     } else {
@@ -154,7 +127,7 @@ bool Weekly::commitWeekly(const QByteArray &content_json)
         if(!json_doc.isArray()) {
             zError << tr("Data is not json array.");
 
-            return false;
+            zErrorQuit;
         }
 
         for(const QJsonValue &value: json_doc.array()) {
@@ -162,34 +135,67 @@ bool Weekly::commitWeekly(const QByteArray &content_json)
         }
     }
 
-    QVariant cookies = getValueFromConfig("cookies", m_email).toByteArray();
-    m_csrf_token = getValueFromConfig("csrf_token", m_email).toByteArray();
-    m_members_id = getValueFromConfig("members_id", m_email).toByteArray();
-
-    if(cookies.isValid() && !m_csrf_token.isEmpty() && !m_members_id.isEmpty()) {
-        m_cookieJar->initCookies(cookies);
-
-        httpRequest(&Weekly::onGetEditWeeklyPageFinished, getEditWeeklyUrl());
-        /// get edit weekly page, and post weekly;
+    if(initCookies()) {
+        postWeely();
     } else {
-        httpRequest(&Weekly::onInitCookieFinished, url_tower);
+        httpRequest(&Tower::onInitCookieFinished, url_tower);
     }
-
-    return true;
 }
 
-void Weekly::onInitCookieFinished()
+void Tower::commitOvertime(const QByteArray &title, const QStringList &at_list,
+                            const QByteArray &start_time, const QByteArray &end_time)
+{
+    QTime tmp_start_time = QTime::fromString(start_time, TIME_FORMAT);
+    QTime tmp_end_time = QTime::fromString(end_time, TIME_FORMAT);
+
+    if(!tmp_start_time.isValid()) {
+        zError << tr("%1 is invaild time.").arg(QString(start_time));
+        zErrorQuit;
+    }
+
+    if(!tmp_end_time.isValid()) {
+        zError << tr("%1 is invaild time.").arg(QString(end_time));
+        zErrorQuit;
+    }
+
+    if(tmp_end_time < tmp_start_time) {
+        zError << tr("end time can not be earlier than the start time.");
+        zErrorQuit;
+    }
+
+    if(tmp_end_time.minute() > 50) {
+        tmp_end_time.setHMS(tmp_end_time.hour() + 1, 0, 0);
+    } else if(tmp_end_time.minute() > 20) {
+        tmp_end_time.setHMS(tmp_end_time.hour(), 30, 0);
+    } else {
+        tmp_end_time.setHMS(tmp_end_time.hour(), 0, 0);
+    }
+
+    m_type = WorkOvertimeType;
+    m_overtimeTitle = title;
+    m_atList = at_list;
+    m_startTime = start_time;
+    m_endTime = tmp_end_time.toString(TIME_FORMAT).toLatin1();
+
+    if(initCookies()) {
+        postOvertimeCalendar();
+    } else {
+        httpRequest(&Tower::onInitCookieFinished, url_tower);
+    }
+}
+
+void Tower::onInitCookieFinished()
 {
     GET_REPLY
 
     reply->deleteLater();
 
-    httpRequest(&Weekly::onGetLoginPageFinished, url_login_page);
+    httpRequest(&Tower::onGetLoginPageFinished, url_login_page);
     /// init csrf-token
 }
 
 
-void Weekly::onGetLoginPageFinished()
+void Tower::onGetLoginPageFinished()
 {   
     GET_REPLY
 
@@ -206,10 +212,38 @@ void Weekly::onGetLoginPageFinished()
             if(tmp_list.count() > 1) {
                 m_csrf_token = tmp_list[1];
 
-                if(m_saveCookie)
-                    setValueToConfig("csrf_token", m_csrf_token, m_email);
+                setValueToConfig("csrf_token", m_csrf_token, m_email);
 
                 reply->deleteLater();
+
+                /*if(!m_password.isEmpty()) {
+                    if(!m_password.isEmpty() && m_password != pass) {
+                        query_user:
+
+                        zPrint << tr("Enter the password and saved locally inconsistent, whether to update the saved data? [n/Y]");
+
+                        QString str = readLineFromStdin();
+
+                        if(str.toUpper() == "Y" || str.isEmpty()) {
+                            clearConfig(m_email);
+
+                            m_password = pass;
+                        } else if(str.toUpper() != "N") {
+                            goto query_user;
+                        }
+                    }
+                } else */
+                if(m_password.isEmpty()){
+                    zPrint << tr("input password: ");
+
+                    m_password = readLineFromStdin().toUtf8();
+
+                    if(m_password.isEmpty()) {
+                        zError << tr("input psaaword is empty.");
+
+                        zErrorQuit;
+                    }
+                }
 
                 QByteArray data = "email=" + m_email +"&password=" + m_password;
 
@@ -217,7 +251,7 @@ void Weekly::onGetLoginPageFinished()
 
                 rawHeader["X-CSRF-Token"] = m_csrf_token;
 
-                httpRequest(&Weekly::onLoginFinished, url_login_page, data, rawHeader);
+                httpRequest(&Tower::onLoginFinished, url_login_page, data, rawHeader);
                 /// login.
             }
         }
@@ -226,7 +260,7 @@ void Weekly::onGetLoginPageFinished()
     reply->deleteLater();
 }
 
-void Weekly::onLoginFinished()
+void Tower::onLoginFinished()
 {
     GET_REPLY
 
@@ -237,12 +271,10 @@ void Weekly::onLoginFinished()
 
     for(const QJsonValue &value : errors) {
         zError << (value.toObject()["msg"].toString());
-
-        zErrorQuit;
     }
 
     if(!errors.isEmpty())
-        qApp->exit(-1);
+        zErrorQuit;
 
     if(json_obj["success"].toBool()) {
         const QByteArray &target_url = json_obj["target_url"].toString().toLatin1();
@@ -259,7 +291,7 @@ void Weekly::onLoginFinished()
                     const QList<QByteArray> &tmp_list = reply->readAll().split('"');
 
                     if(tmp_list.count() > 1) {
-                        httpRequest(&Weekly::onGetProjectsPageFinished, tmp_list[1]);
+                        httpRequest(&Tower::onGetProjectsPageFinished, tmp_list[1]);
                         /// get projects page.
                     }
 
@@ -271,31 +303,59 @@ void Weekly::onLoginFinished()
     reply->deleteLater();
 }
 
-void Weekly::onGetProjectsPageFinished()
+void Tower::onGetProjectsPageFinished()
 {
-    GET_REPLY
+    GET_REPLY;
+
+    QVariant cookie_list = m_cookieJar->getCookies();
+
+    setValueToConfig("cookies", cookie_list, m_email);
 
     const QByteArray data = reply->readAll();
 
-    QRegularExpression rx("/members/\\w+?(?=\\?me)");
-    QRegularExpressionMatch match = rx.match(data);
+    QRegularExpression rx("\"(team-guid|member-guid|member-nickname)\"\\s*value=\"(\\S+?)(?=\")");
+    QRegularExpressionMatchIterator it = rx.globalMatch(data);
 
-    if(match.isValid()) {
-        m_members_id = match.captured().toLatin1();
-
-        if(m_saveCookie)
-            setValueToConfig("members_id", m_members_id, m_email);
-
-        httpRequest(&Weekly::onGetEditWeeklyPageFinished, getEditWeeklyUrl());
-        /// get edit weekly page.
-    } else {
-        zError << rx.errorString();
+    if(!it.hasNext()) {
+        zError << tr("get team/member guid and nickname failed: ") << rx.errorString();
 
         zErrorQuit;
     }
+
+    while(it.hasNext()) {
+        QRegularExpressionMatch match = it.next();
+
+        const QString guid_type = match.captured(1);
+
+        if(guid_type == "team-guid") {
+            m_team_guid = match.captured(2).toUtf8();
+
+            setValueToConfig("team_guid", m_team_guid, m_email);
+        } else if(guid_type == "member-guid") {
+            m_members_id = match.captured(2).toUtf8();
+
+            setValueToConfig("members_id", m_members_id, m_email);
+        } else if(guid_type == "member-nickname") {
+            m_nickname = match.captured(2).toUtf8();
+
+            setValueToConfig("nickname", m_nickname, m_email);
+        }
+    }
+
+    switch (m_type) {
+    case WeeklType:
+        postWeely();
+        break;
+    case WorkOvertimeType:
+        postOvertimeCalendar();
+        break;
+    default:
+        zError << tr("Unknow request type: ") << m_type;
+        break;
+    }
 }
 
-void Weekly::onGetEditWeeklyPageFinished()
+void Tower::onGetEditWeeklyPageFinished()
 {
     GET_REPLY
 
@@ -306,17 +366,12 @@ void Weekly::onGetEditWeeklyPageFinished()
 
     for(const QJsonValue &value : errors) {
         zError << value.toObject()["msg"].toString();
-
-        zErrorQuit;
     }
 
+    if(!errors.isEmpty())
+        zErrorQuit;
+
     if(json_obj["success"].toBool()) {
-        if(m_saveCookie) {
-            QVariant cookie_list = m_cookieJar->getCookies();
-
-            setValueToConfig("cookies", cookie_list, m_email);
-        }
-
         const QString &html = json_obj["html"].toString();
 
         QRegularExpression rx("name=\"(?<request_type>\\w+?)\"\\s*value=\"(?<request_id>\\w+?)\".*?\\s*?(?<message>.*?" + m_keyword +".*)");
@@ -421,12 +476,12 @@ void Weekly::onGetEditWeeklyPageFinished()
     }
 }
 
-QDate Weekly::getWeekStartDate(const QDate &date)
+QDate Tower::getWeekStartDate(const QDate &date)
 {
     return date.addDays(- date.dayOfWeek() + 1);
 }
 
-int Weekly::getWeekNumber(const QDate &date, int *year)
+int Tower::getWeekNumber(const QDate &date, int *year)
 {
     if(date.isValid()) {
         int week = date.dayOfWeek();
@@ -446,7 +501,19 @@ int Weekly::getWeekNumber(const QDate &date, int *year)
     return 0;
 }
 
-QByteArray Weekly::getTargetWeek() const
+Tower::RequestType Tower::getTypeByString(const QString &type)
+{
+    if(type == WEEKLY_TYPE)
+        return WeeklType;
+    else if(type == WORK_OVERTIME_TYPE)
+        return WorkOvertimeType;
+    else
+        zError << tr("unknow request type:") << type;
+
+    return Unknow;
+}
+
+QByteArray Tower::getTargetWeek() const
 {
     int year;
     int week_index;
@@ -460,18 +527,183 @@ QByteArray Weekly::getTargetWeek() const
     return "";
 }
 
-QByteArray Weekly::getPostWeeklyUrl() const
+QByteArray Tower::getPostWeeklyUrl() const
 {
-    return url_tower + m_members_id + "/weekly_reports/" + getTargetWeek();
+    return url_tower + "/members/" + m_members_id + "/weekly_reports/" + getTargetWeek();
 }
 
-QByteArray Weekly::getEditWeeklyUrl() const
+QByteArray Tower::getEditWeeklyUrl() const
 {
-    return url_tower + m_members_id + "/weekly_reports/" + getTargetWeek() + "/edit";
+    return url_tower + "/members/" + m_members_id + "/weekly_reports/" + getTargetWeek() + "/edit";
+}
+
+QByteArray Tower::getAddCalendarUrl() const
+{
+    return url_tower + "/teams/" + m_team_guid+ "/calendar_events/";
+}
+
+QByteArray Tower::getMembersUrl() const
+{
+    return url_tower + "/teams/" + m_team_guid+ "/members/";
+}
+
+QByteArray Tower::mapToHttpBody(const QByteArrayMap &map)
+{
+    if(map.isEmpty())
+        return "";
+
+    QByteArray array;
+
+    for(const QByteArray &key : map.keys())
+        array.append("&").append(key).append("=").append(map[key]).toPercentEncoding();
+
+    return array.mid(1);
+}
+
+bool Tower::initCookies()
+{
+    QVariant cookies = getValueFromConfig("cookies", m_email).toByteArray();
+
+    m_csrf_token = getValueFromConfig("csrf_token", m_email).toByteArray();
+    m_members_id = getValueFromConfig("members_id", m_email).toByteArray();
+    m_team_guid = getValueFromConfig("team_guid", m_email).toByteArray();
+
+    if(cookies.isValid() && !m_csrf_token.isEmpty()
+            && !m_members_id.isEmpty() && !m_team_guid.isEmpty()) {
+        m_cookieJar->initCookies(cookies);
+
+        return true;
+    }
+
+    return false;
+}
+
+void Tower::postWeely()
+{
+    httpRequest(&Tower::onGetEditWeeklyPageFinished, getEditWeeklyUrl());
+    /// get edit weekly page.
+}
+
+void Tower::postOvertimeCalendar()
+{
+    QByteArrayMap rawHeader;
+
+    rawHeader["X-CSRF-Token"] = m_csrf_token;
+
+    zDebug << m_csrf_token;
+    zDebug << m_cookieJar->getCookies();
+
+    QByteArrayMap request_data;
+    QByteArray current_date = m_targetDate.toString(Qt::ISODate).toLatin1();
+
+    request_data["content"] = m_overtimeTitle;
+    request_data["starts_at"] = current_date + "+" + m_startTime;
+    request_data["ends_at"] = current_date + "+" + m_endTime;
+    request_data["is_show_creator"] = "true";
+    request_data["caleventable_type"] = "Calendar";
+    request_data["caleventable_guid"] = CALEVENTABLE_GUID;
+
+    httpRequest([this] {
+        GET_REPLY;
+
+        const QJsonObject &json_obj = QJsonDocument::fromJson(reply->readAll()).object();
+        const QJsonArray &errors = json_obj["errors"].toArray();
+
+        for(const QJsonValue &value : errors) {
+            zError << value.toObject()["msg"].toString();
+        }
+
+        if(json_obj["success"].toBool()) {
+            zPrint << tr("Success");
+
+            const QByteArray url = url_tower + json_obj["url"].toString().toLatin1() + "/comments";
+
+            const QMap<QString, QVariant> members_map = getValueFromConfig("members", m_email).toMap();
+
+            if(members_map.isEmpty()) {
+                httpRequest([this, url] {
+                    GET_REPLY;
+
+                    QRegularExpression rx("href=\"/members/(?<guid>\\w+?)\"\\s+title=\"(?<name>\\S+?)\"");
+
+                    QRegularExpressionMatchIterator it = rx.globalMatch(reply->readAll());
+
+                    if(!it.hasNext()) {
+                        zError << tr("get member guid failed: ") << rx.errorString();
+
+                        zErrorQuit;
+                    }
+
+                    QMap<QString, QVariant> members_map;
+
+                    while(it.hasNext()) {
+                        QRegularExpressionMatch match = it.next();
+
+                        const QString &guid = match.captured("guid");
+                        const QString &name = match.captured("name");
+
+                        members_map[name] = guid;
+                    }
+
+                    setValueToConfig("members", members_map, m_email);
+
+                    atMembersForOvertimeCalender(url, members_map);
+                }, getMembersUrl());
+            } else {
+                atMembersForOvertimeCalender(url, members_map);
+            }
+        } else {
+            zErrorQuit;
+        }
+    }, getAddCalendarUrl(), mapToHttpBody(request_data), rawHeader);
+}
+
+void Tower::atMembersForOvertimeCalender(const QByteArray &url, const QVariantMap &members_map)
+{
+    for(QString &at_name : m_atList) {
+        const QString &guid = members_map[at_name].toString();
+
+        if(guid.isEmpty()) {
+            zError << tr("not found %1 user.").arg(at_name);
+            continue;
+        }
+
+        m_atGuidList << guid;
+        at_name = QString("<a data-mention=\"true\"  href=\"/members/%1\">%2</a>").arg(guid).arg(at_name);
+    }
+
+    QByteArrayMap request_map;
+
+    request_map["is_html"] = "1";
+    request_map["cc_guids"] = m_atGuidList.join(',').toUtf8();
+    request_map["comment_content"] = m_atList.join(' ').toUtf8();
+
+    QByteArrayMap rawHeader;
+
+    rawHeader["X-CSRF-Token"] = m_csrf_token;
+
+    httpRequest([this] {
+        GET_REPLY;
+
+        const QJsonObject &json_obj = QJsonDocument::fromJson(reply->readAll()).object();
+        const QJsonArray &errors = json_obj["errors"].toArray();
+
+        for(const QJsonValue &value : errors) {
+            zError << value.toObject()["msg"].toString();
+        }
+
+        if(errors.isEmpty()) {
+            zPrint << tr("Success");
+
+            zQuit;
+        } else {
+            zErrorQuit;
+        }
+    }, url, mapToHttpBody(request_map), rawHeader);
 }
 
 template<typename Function>
-void Weekly::httpRequest(Function slot, const QByteArray &url,
+void Tower::httpRequest(Function slot, const QByteArray &url,
                          const QByteArray &data, const QByteArrayMap &header)
 {
     QNetworkRequest request;
@@ -499,7 +731,7 @@ void Weekly::httpRequest(Function slot, const QByteArray &url,
     zInfo << tr("request url:") << url;
 
 //    if(!data.isEmpty()) {
-//        zInfo << tr("request data:") << QString::fromUtf8(QByteArray::fromPercentEncoding(data));
+//        zInfo << tr("request data:") << data;//QString::fromUtf8(QByteArray::fromPercentEncoding(data));
 //    }
 }
 
