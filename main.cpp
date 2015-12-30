@@ -31,7 +31,7 @@ int main(int argc, char *argv[])
 //    }
 
     if(argc > 2) {
-        for (int a = 0; a < argc; ++a) {
+        for (int a = 1; a < argc; ++a) {
             if(QString::fromLocal8Bit(argv[a]) == "--exec") {
                 if(a < argc - 1) {
                     QSettings settings("zccrs", "tower-tool");
@@ -47,7 +47,7 @@ int main(int argc, char *argv[])
                         for(a = 1; a < list.count(); ++a) {
                             const QString &str = list[a];
 
-                            char *arg = new char[str.count() + 1];
+                            char *arg = new char[strlen(str.toLocal8Bit().constData()) + 1];
 
                             strcpy(arg, str.toLocal8Bit().constData());
 
@@ -212,11 +212,6 @@ int main(int argc, char *argv[])
     if(request_type == Tower::Unknow)
         zErrorQuit;
 
-    Tower weekly;
-
-    weekly.init(parser.value(option_email).toUtf8(), parser.value(option_pass).toUtf8(),
-                parser.value(option_date), parser.value(option_filter), parser.isSet(option_default));
-
     const QStringList arguments = parser.positionalArguments();
 
     switch (request_type) {
@@ -259,12 +254,23 @@ int main(int argc, char *argv[])
 
                 parser.showHelp(-1);
             }
+
+            Tower weekly;
+
+            weekly.init(parser.value(option_email).toUtf8(), parser.value(option_pass).toUtf8(),
+                        parser.value(option_date), parser.value(option_filter), parser.isSet(option_default));
+            weekly.commitWeekly(data);
+        } else {
+            parser.showHelp(-1);
         }
 
-        weekly.commitWeekly(data);
         break;
     }
     case Tower::WorkOvertimeType:{
+        Tower weekly;
+
+        weekly.init(parser.value(option_email).toUtf8(), parser.value(option_pass).toUtf8(),
+                    parser.value(option_date), parser.value(option_filter), parser.isSet(option_default));
         weekly.commitOvertime(parser.value(option_title).toUtf8(), arguments,
                               parser.value(option_start_time).toUtf8(),
                               parser.value(option_end_time).toUtf8());
