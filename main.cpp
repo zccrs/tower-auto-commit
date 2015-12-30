@@ -227,6 +227,8 @@ int main(int argc, char *argv[])
 
     const QStringList arguments = parser.positionalArguments();
 
+    Tower weekly;
+
     switch (request_type) {
     case Tower::WeeklType:{
         QByteArray data;
@@ -269,8 +271,6 @@ int main(int argc, char *argv[])
             }
         }
 
-        Tower weekly;
-
         weekly.init(parser.value(option_email).toUtf8(), parser.value(option_pass).toUtf8(),
                     parser.value(option_date), parser.value(option_filter), parser.isSet(option_default));
         weekly.commitWeekly(data);
@@ -278,8 +278,6 @@ int main(int argc, char *argv[])
         break;
     }
     case Tower::WorkOvertimeType:{
-        Tower weekly;
-
         weekly.init(parser.value(option_email).toUtf8(), parser.value(option_pass).toUtf8(),
                     parser.value(option_date), parser.value(option_filter), parser.isSet(option_default));
         weekly.commitOvertime(parser.value(option_title).toUtf8(), arguments,

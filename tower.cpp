@@ -20,7 +20,6 @@
     if(reply->error() != QNetworkReply::NoError){\
         zError << tr("Request %1 error: ").arg(reply->url().toString());\
         zError << reply->errorString();\
-        zErrorQuit;\
     }
 
 #define CALEVENTABLE_GUID "b96e5a357a884c7e8c5c2ab12858dd02"
@@ -234,11 +233,11 @@ void Tower::onGetLoginPageFinished()
                     }
                 } else */
                 if(m_password.isEmpty()){
-                    zPrint << tr("input password: ");
-
-                    qDebug("\033[8m");
+                    zPrint << tr("input password: ") << "\033[8m";//\033[?25l
 
                     m_password = readLineFromStdin().toUtf8();
+
+                    zPrint << "\033[m";//\033[?25h
 
                     if(m_password.isEmpty()) {
                         zError << tr("input psaaword is empty.");
