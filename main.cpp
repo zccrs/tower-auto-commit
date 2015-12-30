@@ -126,6 +126,19 @@ int main(int argc, char *argv[])
 
     if(a.arguments().count() <= 1) {
         parser.showHelp(0);
+    } else {
+        bool match = false;
+
+        for(const QString &str : a.arguments()) {
+            if(str.startsWith('-')) {
+                match = true;
+                break;
+            }
+        }
+
+        if(!match) {
+            parser.showHelp(-1);
+        }
     }
 
     if(parser.isSet(option_exec)) {
@@ -254,15 +267,13 @@ int main(int argc, char *argv[])
 
                 parser.showHelp(-1);
             }
-
-            Tower weekly;
-
-            weekly.init(parser.value(option_email).toUtf8(), parser.value(option_pass).toUtf8(),
-                        parser.value(option_date), parser.value(option_filter), parser.isSet(option_default));
-            weekly.commitWeekly(data);
-        } else {
-            parser.showHelp(-1);
         }
+
+        Tower weekly;
+
+        weekly.init(parser.value(option_email).toUtf8(), parser.value(option_pass).toUtf8(),
+                    parser.value(option_date), parser.value(option_filter), parser.isSet(option_default));
+        weekly.commitWeekly(data);
 
         break;
     }

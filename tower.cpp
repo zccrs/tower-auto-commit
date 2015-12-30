@@ -236,6 +236,8 @@ void Tower::onGetLoginPageFinished()
                 if(m_password.isEmpty()){
                     zPrint << tr("input password: ");
 
+                    qDebug("\033[8m");
+
                     m_password = readLineFromStdin().toUtf8();
 
                     if(m_password.isEmpty()) {
@@ -245,7 +247,7 @@ void Tower::onGetLoginPageFinished()
                     }
                 }
 
-                QByteArray data = "email=" + m_email +"&password=" + m_password;
+                QByteArray data = "email=" + m_email +"&password=" + m_password + "&remember_me=on";
 
                 QByteArrayMap rawHeader;
 
