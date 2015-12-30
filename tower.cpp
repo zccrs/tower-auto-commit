@@ -12,6 +12,10 @@
 #include <QNetworkCookieJar>
 #include <QNetworkCookie>
 
+#ifdef Q_OS_UNIX
+#include <unistd.h>
+#endif
+
 #include "tower.h"
 
 #define GET_REPLY \
@@ -233,11 +237,13 @@ void Tower::onGetLoginPageFinished()
                     }
                 } else */
                 if(m_password.isEmpty()){
+#ifdef _UNISTD_H
+                    m_password = getpass(tr("input password: ").toLocal8Bit());
+#else
                     zPrint << tr("input password: ") << "\033[8m";//\033[?25l
-
                     m_password = readLineFromStdin().toUtf8();
-
                     zPrint << "\033[m";//\033[?25h
+#endif
 
                     if(m_password.isEmpty()) {
                         zError << tr("input psaaword is empty.");
